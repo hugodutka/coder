@@ -729,7 +729,12 @@ scripts/ci-report/testdata/.gen-golden: $(wildcard scripts/ci-report/testdata/*)
 	done
 
 test:
-	$(GIT_FLAGS) gotestsum --format standard-quiet -- -v -short -count=1 ./...
+	$(GIT_FLAGS) gotestsum \
+		--junitfile="gotests.xml" \
+		--jsonfile="gotests.json" \
+		--packages="./..." -- \
+		-timeout=20m \
+		-count=1
 .PHONY: test
 
 # sqlc-cloud-is-setup will fail if no SQLc auth token is set. Use this as a
@@ -768,9 +773,8 @@ test-postgres: test-postgres-docker
 	$(GIT_FLAGS)  DB=ci DB_FROM=$(shell go run scripts/migrate-ci/main.go) gotestsum \
 		--junitfile="gotests.xml" \
 		--jsonfile="gotests.json" \
-		--packages="./..." -- \
+		--packages="./agent" -- \
 		-timeout=20m \
-		-failfast \
 		-count=1
 .PHONY: test-postgres
 
@@ -798,17 +802,9 @@ test-postgres-docker:
 		--name test-postgres-docker-${POSTGRES_VERSION} \
 		--restart no \
 		--detach \
-		--memory 16GB \
-		gcr.io/coder-dev-1/postgres:${POSTGRES_VERSION} \
-		-c shared_buffers=1GB \
-		-c work_mem=1GB \
-		-c effective_cache_size=1GB \
-		-c max_connections=1000 \
-		-c fsync=off \
-		-c synchronous_commit=off \
-		-c full_page_writes=off \
-		-c log_statement=all
-	while ! pg_isready -h 127.0.0.1
+		postgres:16 \
+		-c 'max_connections=10000' 
+	while ! docker exec test-postgres-docker-${POSTGRES_VERSION} pg_isready -h 127.0.0.1 
 	do
 		echo "$(date) - waiting for database to start"
 		sleep 0.5

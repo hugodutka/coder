@@ -1,7 +1,6 @@
 {
 	"name": "Development environments on your infrastructure",
-	"image": "codercom/oss-dogfood:latest",
-
+	"dockerFile": "Dockerfile",
 	"features": {
 		// See all possible options here https://github.com/devcontainers/features/tree/main/src/docker-in-docker
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {
