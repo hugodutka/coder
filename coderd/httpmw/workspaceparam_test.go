@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,12 +13,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/coder/v2/coderd/database"
 	"github.com/coder/coder/v2/coderd/database/dbgen"
-	"github.com/coder/coder/v2/coderd/database/dbmem"
+	"github.com/coder/coder/v2/coderd/database/dbtestutil"
 	"github.com/coder/coder/v2/coderd/database/dbtime"
 	"github.com/coder/coder/v2/coderd/httpmw"
 	"github.com/coder/coder/v2/codersdk"
@@ -28,6 +30,7 @@ func TestWorkspaceParam(t *testing.T) {
 	t.Parallel()
 
 	setup := func(db database.Store) (*http.Request, database.User) {
+		dbtestutil.DisableForeignKeys(t, db)
 		var (
 			id, secret = randomAPIKeyParts()
 			hashed     = sha256.Sum256([]byte(secret))
@@ -46,6 +49,7 @@ func TestWorkspaceParam(t *testing.T) {
 			CreatedAt:      dbtime.Now(),
 			UpdatedAt:      dbtime.Now(),
 			LoginType:      database.LoginTypePassword,
+			RBACRoles:      []string{},
 		})
 		require.NoError(t, err)
 
@@ -64,6 +68,13 @@ func TestWorkspaceParam(t *testing.T) {
 			ExpiresAt:    dbtime.Now().Add(time.Minute),
 			LoginType:    database.LoginTypePassword,
 			Scope:        database.APIKeyScopeAll,
+			IPAddress: pqtype.Inet{
+				IPNet: net.IPNet{
+					IP:   net.IPv4(127, 0, 0, 1),
+					Mask: net.IPv4Mask(255, 255, 255, 255),
+				},
+				Valid: true,
+			},
 		})
 		require.NoError(t, err)
 
@@ -75,7 +86,7 @@ func TestWorkspaceParam(t *testing.T) {
 
 	t.Run("None", func(t *testing.T) {
 		t.Parallel()
-		db := dbmem.New()
+		db, _ := dbtestutil.NewDB(t)
 		rtr := chi.NewRouter()
 		rtr.Use(httpmw.ExtractWorkspaceParam(db))
 		rtr.Get("/", nil)
@@ -90,7 +101,7 @@ func TestWorkspaceParam(t *testing.T) {
 
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
-		db := dbmem.New()
+		db, _ := dbtestutil.NewDB(t)
 		rtr := chi.NewRouter()
 		rtr.Use(httpmw.ExtractWorkspaceParam(db))
 		rtr.Get("/", nil)
@@ -106,7 +117,7 @@ func TestWorkspaceParam(t *testing.T) {
 
 	t.Run("Found", func(t *testing.T) {
 		t.Parallel()
-		db := dbmem.New()
+		db, _ := dbtestutil.NewDB(t)
 		rtr := chi.NewRouter()
 		rtr.Use(
 			httpmw.ExtractAPIKeyMW(httpmw.ExtractAPIKeyConfig{
@@ -348,7 +359,8 @@ type setupConfig struct {
 
 func setupWorkspaceWithAgents(t testing.TB, cfg setupConfig) (database.Store, *http.Request) {
 	t.Helper()
-	db := dbmem.New()
+	db, _ := dbtestutil.NewDB(t)
+	dbtestutil.DisableForeignKeys(nil, db)
 
 	var (
 		user     = dbgen.User(t, db, database.User{})
