@@ -51,8 +51,7 @@ func run() error {
 		return err
 	}
 	databasePath := filepath.Join(localPath, "..", "..", "..", "coderd", "database")
-
-	err = orderAndStubDatabaseFunctions(filepath.Join(databasePath, "dbmetrics", "dbmetrics.go"), "m", "metricsStore", func(params stubParams) string {
+	err = orderAndStubDatabaseFunctions(filepath.Join(databasePath, "dbmetrics", "querymetrics.go"), "m", "queryMetricsStore", func(params stubParams) string {
 		return fmt.Sprintf(`
 start := time.Now()
 %s := m.s.%s(%s)

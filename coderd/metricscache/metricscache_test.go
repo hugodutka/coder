@@ -220,7 +220,7 @@ func TestCache_BuildTime(t *testing.T) {
 				JobID:          pj.ID,
 				OrganizationID: org.ID,
 			})
-			workspace := dbgen.Workspace(t, db, database.Workspace{
+			workspace := dbgen.Workspace(t, db, database.WorkspaceTable{
 				TemplateID:     template.ID,
 				OwnerID:        u.ID,
 				OrganizationID: org.ID,
