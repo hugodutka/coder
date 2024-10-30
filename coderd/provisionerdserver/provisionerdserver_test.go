@@ -925,10 +925,17 @@ func TestFailJob(t *testing.T) {
 			auditor: auditor,
 		})
 		org := dbgen.Organization(t, db, database.Organization{})
+		u := dbgen.User(t, db, database.User{})
+		tpl := dbgen.Template(t, db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
 		workspace, err := db.InsertWorkspace(ctx, database.InsertWorkspaceParams{
 			ID:               uuid.New(),
 			AutomaticUpdates: database.AutomaticUpdatesNever,
 			OrganizationID:   org.ID,
+			TemplateID:       tpl.ID,
+			OwnerID:          u.ID,
 		})
 		require.NoError(t, err)
 		buildID := uuid.New()

@@ -1,4 +1,0 @@
-github.com/coder/coder/v2/coderd/prometheusmetrics,TestWorkspaceLatestBuildStatuses
-github.com/coder/coder/v2/coderd/prometheusmetrics,TestWorkspaceLatestBuildStatuses/Multiple
-github.com/coder/coder/v2/coderd/provisionerdserver,TestFailJob
-github.com/coder/coder/v2/coderd/provisionerdserver,TestFailJob/WorkspaceBuild
