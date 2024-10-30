@@ -21,14 +21,20 @@ func TestWorkspaceBuildParam(t *testing.T) {
 	t.Parallel()
 
 	setupAuthentication := func(db database.Store) (*http.Request, database.WorkspaceTable) {
-		dbtestutil.DisableForeignKeys(nil, db)
 		var (
 			user     = dbgen.User(t, db, database.User{})
 			_, token = dbgen.APIKey(t, db, database.APIKey{
 				UserID: user.ID,
 			})
+			org = dbgen.Organization(t, db, database.Organization{})
+			tpl = dbgen.Template(t, db, database.Template{
+				OrganizationID: org.ID,
+				CreatedBy:      user.ID,
+			})
 			workspace = dbgen.Workspace(t, db, database.WorkspaceTable{
-				OwnerID: user.ID,
+				OwnerID:        user.ID,
+				OrganizationID: org.ID,
+				TemplateID:     tpl.ID,
 			})
 		)
 
@@ -92,10 +98,21 @@ func TestWorkspaceBuildParam(t *testing.T) {
 		})
 
 		r, workspace := setupAuthentication(db)
+		tv := dbgen.TemplateVersion(t, db, database.TemplateVersion{
+			TemplateID: uuid.NullUUID{
+				UUID:  workspace.TemplateID,
+				Valid: true,
+			},
+			OrganizationID: workspace.OrganizationID,
+			CreatedBy:      workspace.OwnerID,
+		})
+		pj := dbgen.ProvisionerJob(t, db, nil, database.ProvisionerJob{})
 		workspaceBuild := dbgen.WorkspaceBuild(t, db, database.WorkspaceBuild{
-			Transition:  database.WorkspaceTransitionStart,
-			Reason:      database.BuildReasonInitiator,
-			WorkspaceID: workspace.ID,
+			JobID:             pj.ID,
+			TemplateVersionID: tv.ID,
+			Transition:        database.WorkspaceTransitionStart,
+			Reason:            database.BuildReasonInitiator,
+			WorkspaceID:       workspace.ID,
 		})
 
 		chi.RouteContext(r.Context()).URLParams.Add("workspacebuild", workspaceBuild.ID.String())

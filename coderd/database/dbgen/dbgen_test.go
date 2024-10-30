@@ -137,9 +137,36 @@ func TestGenerator(t *testing.T) {
 	t.Run("Workspace", func(t *testing.T) {
 		t.Parallel()
 		db, _ := dbtestutil.NewDB(t)
-		dbtestutil.DisableForeignKeys(t, db)
-		exp := dbgen.Workspace(t, db, database.WorkspaceTable{})
-		require.Equal(t, exp, must(db.GetWorkspaceByID(context.Background(), exp.ID)))
+		u := dbgen.User(t, db, database.User{})
+		org := dbgen.Organization(t, db, database.Organization{})
+		tpl := dbgen.Template(t, db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		exp := dbgen.Workspace(t, db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
+		w := must(db.GetWorkspaceByID(context.Background(), exp.ID))
+		table := database.WorkspaceTable{
+			ID:                w.ID,
+			CreatedAt:         w.CreatedAt,
+			UpdatedAt:         w.UpdatedAt,
+			OwnerID:           w.OwnerID,
+			OrganizationID:    w.OrganizationID,
+			TemplateID:        w.TemplateID,
+			Deleted:           w.Deleted,
+			Name:              w.Name,
+			AutostartSchedule: w.AutostartSchedule,
+			Ttl:               w.Ttl,
+			LastUsedAt:        w.LastUsedAt,
+			DormantAt:         w.DormantAt,
+			DeletingAt:        w.DeletingAt,
+			AutomaticUpdates:  w.AutomaticUpdates,
+			Favorite:          w.Favorite,
+		}
+		require.Equal(t, exp, table)
 	})
 
 	t.Run("WorkspaceAgent", func(t *testing.T) {

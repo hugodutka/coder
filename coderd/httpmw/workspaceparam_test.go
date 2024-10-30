@@ -30,7 +30,6 @@ func TestWorkspaceParam(t *testing.T) {
 	t.Parallel()
 
 	setup := func(db database.Store) (*http.Request, database.User) {
-		dbtestutil.DisableForeignKeys(t, db)
 		var (
 			id, secret = randomAPIKeyParts()
 			hashed     = sha256.Sum256([]byte(secret))
@@ -131,11 +130,18 @@ func TestWorkspaceParam(t *testing.T) {
 			rw.WriteHeader(http.StatusOK)
 		})
 		r, user := setup(db)
+		org := dbgen.Organization(t, db, database.Organization{})
+		tpl := dbgen.Template(t, db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      user.ID,
+		})
 		workspace, err := db.InsertWorkspace(context.Background(), database.InsertWorkspaceParams{
 			ID:               uuid.New(),
 			OwnerID:          user.ID,
 			Name:             "hello",
 			AutomaticUpdates: database.AutomaticUpdatesNever,
+			OrganizationID:   org.ID,
+			TemplateID:       tpl.ID,
 		})
 		require.NoError(t, err)
 		chi.RouteContext(r.Context()).URLParams.Add("workspace", workspace.ID.String())
@@ -360,27 +366,43 @@ type setupConfig struct {
 func setupWorkspaceWithAgents(t testing.TB, cfg setupConfig) (database.Store, *http.Request) {
 	t.Helper()
 	db, _ := dbtestutil.NewDB(t)
-	dbtestutil.DisableForeignKeys(nil, db)
 
 	var (
 		user     = dbgen.User(t, db, database.User{})
 		_, token = dbgen.APIKey(t, db, database.APIKey{
 			UserID: user.ID,
 		})
-		workspace = dbgen.Workspace(t, db, database.WorkspaceTable{
-			OwnerID: user.ID,
-			Name:    cfg.WorkspaceName,
+		org = dbgen.Organization(t, db, database.Organization{})
+		tpl = dbgen.Template(t, db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      user.ID,
 		})
-		build = dbgen.WorkspaceBuild(t, db, database.WorkspaceBuild{
-			WorkspaceID: workspace.ID,
-			Transition:  database.WorkspaceTransitionStart,
-			Reason:      database.BuildReasonInitiator,
+		workspace = dbgen.Workspace(t, db, database.WorkspaceTable{
+			OwnerID:        user.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+			Name:           cfg.WorkspaceName,
 		})
 		job = dbgen.ProvisionerJob(t, db, nil, database.ProvisionerJob{
-			ID:            build.JobID,
 			Type:          database.ProvisionerJobTypeWorkspaceBuild,
 			Provisioner:   database.ProvisionerTypeEcho,
 			StorageMethod: database.ProvisionerStorageMethodFile,
+		})
+		tv = dbgen.TemplateVersion(t, db, database.TemplateVersion{
+			TemplateID: uuid.NullUUID{
+				UUID:  tpl.ID,
+				Valid: true,
+			},
+			JobID:          job.ID,
+			OrganizationID: org.ID,
+			CreatedBy:      user.ID,
+		})
+		_ = dbgen.WorkspaceBuild(t, db, database.WorkspaceBuild{
+			JobID:             job.ID,
+			WorkspaceID:       workspace.ID,
+			Transition:        database.WorkspaceTransitionStart,
+			Reason:            database.BuildReasonInitiator,
+			TemplateVersionID: tv.ID,
 		})
 	)
 
