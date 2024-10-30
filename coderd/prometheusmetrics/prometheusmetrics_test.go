@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -134,14 +135,15 @@ func TestWorkspaceLatestBuildTotals(t *testing.T) {
 		Name: "Multiple",
 		Database: func() database.Store {
 			db, _ := dbtestutil.NewDB(t)
-			dbtestutil.DisableForeignKeys(t, db)
-			insertCanceled(t, db)
-			insertFailed(t, db)
-			insertFailed(t, db)
-			insertSuccess(t, db)
-			insertSuccess(t, db)
-			insertSuccess(t, db)
-			insertRunning(t, db)
+			u := dbgen.User(t, db, database.User{})
+			org := dbgen.Organization(t, db, database.Organization{})
+			insertCanceled(t, db, u, org)
+			insertFailed(t, db, u, org)
+			insertFailed(t, db, u, org)
+			insertSuccess(t, db, u, org)
+			insertSuccess(t, db, u, org)
+			insertSuccess(t, db, u, org)
+			insertRunning(t, db, u, org)
 			return db
 		},
 		Total: 7,
@@ -209,15 +211,16 @@ func TestWorkspaceLatestBuildStatuses(t *testing.T) {
 		Name: "Multiple",
 		Database: func() database.Store {
 			db, _ := dbtestutil.NewDB(t)
-			dbtestutil.DisableForeignKeys(t, db)
-			insertTemplates(t, db)
-			insertCanceled(t, db)
-			insertFailed(t, db)
-			insertFailed(t, db)
-			insertSuccess(t, db)
-			insertSuccess(t, db)
-			insertSuccess(t, db)
-			insertRunning(t, db)
+			u := dbgen.User(t, db, database.User{})
+			org := dbgen.Organization(t, db, database.Organization{})
+			insertTemplates(t, db, u, org)
+			insertCanceled(t, db, u, org)
+			insertFailed(t, db, u, org)
+			insertFailed(t, db, u, org)
+			insertSuccess(t, db, u, org)
+			insertSuccess(t, db, u, org)
+			insertSuccess(t, db, u, org)
+			insertRunning(t, db, u, org)
 			return db
 		},
 		ExpectedWorkspaces: 7,
@@ -643,18 +646,24 @@ var (
 	templateVersionB = uuid.New()
 )
 
-func insertTemplates(t *testing.T, db database.Store) {
+func insertTemplates(t *testing.T, db database.Store, u database.User, org database.Organization) {
 	require.NoError(t, db.InsertTemplate(context.Background(), database.InsertTemplateParams{
 		ID:                  templateA,
 		Name:                "template-a",
 		Provisioner:         database.ProvisionerTypeTerraform,
 		MaxPortSharingLevel: database.AppSharingLevelAuthenticated,
+		CreatedBy:           u.ID,
+		OrganizationID:      org.ID,
 	}))
+	pj := dbgen.ProvisionerJob(t, db, nil, database.ProvisionerJob{})
 
 	require.NoError(t, db.InsertTemplateVersion(context.Background(), database.InsertTemplateVersionParams{
-		ID:         templateVersionA,
-		TemplateID: uuid.NullUUID{UUID: templateA},
-		Name:       "version-1a",
+		ID:             templateVersionA,
+		TemplateID:     uuid.NullUUID{UUID: templateA},
+		Name:           "version-1a",
+		JobID:          pj.ID,
+		OrganizationID: org.ID,
+		CreatedBy:      u.ID,
 	}))
 
 	require.NoError(t, db.InsertTemplate(context.Background(), database.InsertTemplateParams{
@@ -662,60 +671,77 @@ func insertTemplates(t *testing.T, db database.Store) {
 		Name:                "template-b",
 		Provisioner:         database.ProvisionerTypeTerraform,
 		MaxPortSharingLevel: database.AppSharingLevelAuthenticated,
+		CreatedBy:           u.ID,
+		OrganizationID:      org.ID,
 	}))
 
 	require.NoError(t, db.InsertTemplateVersion(context.Background(), database.InsertTemplateVersionParams{
-		ID:         templateVersionB,
-		TemplateID: uuid.NullUUID{UUID: templateB},
-		Name:       "version-1b",
+		ID:             templateVersionB,
+		TemplateID:     uuid.NullUUID{UUID: templateB},
+		Name:           "version-1b",
+		JobID:          pj.ID,
+		OrganizationID: org.ID,
+		CreatedBy:      u.ID,
 	}))
 }
 
-func insertUser(t *testing.T, db database.Store) database.User {
-	username, err := cryptorand.String(8)
-	require.NoError(t, err)
-
-	user, err := db.InsertUser(context.Background(), database.InsertUserParams{
-		ID:        uuid.New(),
-		Username:  username,
-		Email:     username + "@example.com",
-		LoginType: database.LoginTypeNone,
-		RBACRoles: []string{},
-	})
-	require.NoError(t, err)
-
-	return user
-}
-
-func insertRunning(t *testing.T, db database.Store) database.ProvisionerJob {
-	var template, templateVersion uuid.UUID
+func insertRunning(t *testing.T, db database.Store, u database.User, org database.Organization) database.ProvisionerJob {
+	var templateID, templateVersionID uuid.UUID
 	rnd, err := cryptorand.Intn(10)
 	require.NoError(t, err)
+
+	pairs := []struct {
+		tplID     uuid.UUID
+		versionID uuid.UUID
+	}{
+		{templateA, templateVersionA},
+		{templateB, templateVersionB},
+	}
+	for _, pair := range pairs {
+		_, err := db.GetTemplateByID(context.Background(), pair.tplID)
+		if errors.Is(err, sql.ErrNoRows) {
+			_ = dbgen.Template(t, db, database.Template{
+				ID:             pair.tplID,
+				OrganizationID: org.ID,
+				CreatedBy:      u.ID,
+			})
+			_ = dbgen.TemplateVersion(t, db, database.TemplateVersion{
+				ID:             pair.versionID,
+				OrganizationID: org.ID,
+				CreatedBy:      u.ID,
+			})
+		} else {
+			require.NoError(t, err)
+		}
+	}
+
 	if rnd > 5 {
-		template = templateB
-		templateVersion = templateVersionB
+		templateID = templateB
+		templateVersionID = templateVersionB
 	} else {
-		template = templateA
-		templateVersion = templateVersionA
+		templateID = templateA
+		templateVersionID = templateVersionA
 	}
 
 	workspace, err := db.InsertWorkspace(context.Background(), database.InsertWorkspaceParams{
 		ID:               uuid.New(),
-		OwnerID:          insertUser(t, db).ID,
+		OwnerID:          u.ID,
 		Name:             uuid.NewString(),
-		TemplateID:       template,
+		TemplateID:       templateID,
 		AutomaticUpdates: database.AutomaticUpdatesNever,
+		OrganizationID:   org.ID,
 	})
 	require.NoError(t, err)
 
 	job, err := db.InsertProvisionerJob(context.Background(), database.InsertProvisionerJobParams{
-		ID:            uuid.New(),
-		CreatedAt:     dbtime.Now(),
-		UpdatedAt:     dbtime.Now(),
-		Provisioner:   database.ProvisionerTypeEcho,
-		StorageMethod: database.ProvisionerStorageMethodFile,
-		Type:          database.ProvisionerJobTypeWorkspaceBuild,
-		Input:         json.RawMessage("{}"),
+		ID:             uuid.New(),
+		CreatedAt:      dbtime.Now(),
+		UpdatedAt:      dbtime.Now(),
+		Provisioner:    database.ProvisionerTypeEcho,
+		StorageMethod:  database.ProvisionerStorageMethodFile,
+		Type:           database.ProvisionerJobTypeWorkspaceBuild,
+		Input:          json.RawMessage("{}"),
+		OrganizationID: org.ID,
 	})
 	require.NoError(t, err)
 	err = db.InsertWorkspaceBuild(context.Background(), database.InsertWorkspaceBuildParams{
@@ -725,7 +751,7 @@ func insertRunning(t *testing.T, db database.Store) database.ProvisionerJob {
 		BuildNumber:       1,
 		Transition:        database.WorkspaceTransitionStart,
 		Reason:            database.BuildReasonInitiator,
-		TemplateVersionID: templateVersion,
+		TemplateVersionID: templateVersionID,
 	})
 	require.NoError(t, err)
 	// This marks the job as started.
@@ -742,8 +768,8 @@ func insertRunning(t *testing.T, db database.Store) database.ProvisionerJob {
 	return job
 }
 
-func insertCanceled(t *testing.T, db database.Store) {
-	job := insertRunning(t, db)
+func insertCanceled(t *testing.T, db database.Store, u database.User, org database.Organization) {
+	job := insertRunning(t, db, u, org)
 	err := db.UpdateProvisionerJobWithCancelByID(context.Background(), database.UpdateProvisionerJobWithCancelByIDParams{
 		ID: job.ID,
 		CanceledAt: sql.NullTime{
@@ -762,8 +788,8 @@ func insertCanceled(t *testing.T, db database.Store) {
 	require.NoError(t, err)
 }
 
-func insertFailed(t *testing.T, db database.Store) {
-	job := insertRunning(t, db)
+func insertFailed(t *testing.T, db database.Store, u database.User, org database.Organization) {
+	job := insertRunning(t, db, u, org)
 	err := db.UpdateProvisionerJobWithCompleteByID(context.Background(), database.UpdateProvisionerJobWithCompleteByIDParams{
 		ID: job.ID,
 		CompletedAt: sql.NullTime{
@@ -778,8 +804,8 @@ func insertFailed(t *testing.T, db database.Store) {
 	require.NoError(t, err)
 }
 
-func insertSuccess(t *testing.T, db database.Store) {
-	job := insertRunning(t, db)
+func insertSuccess(t *testing.T, db database.Store, u database.User, org database.Organization) {
+	job := insertRunning(t, db, u, org)
 	err := db.UpdateProvisionerJobWithCompleteByID(context.Background(), database.UpdateProvisionerJobWithCompleteByIDParams{
 		ID: job.ID,
 		CompletedAt: sql.NullTime{
