@@ -128,8 +128,17 @@ func TestNew(t *testing.T) {
 		subj = rbac.Subject{}
 		ctx  = dbauthz.As(context.Background(), rbac.Subject{})
 	)
-	dbtestutil.DisableForeignKeys(t, db)
-	exp := dbgen.Workspace(t, db, database.WorkspaceTable{})
+	u := dbgen.User(t, db, database.User{})
+	org := dbgen.Organization(t, db, database.Organization{})
+	tpl := dbgen.Template(t, db, database.Template{
+		OrganizationID: org.ID,
+		CreatedBy:      u.ID,
+	})
+	exp := dbgen.Workspace(t, db, database.WorkspaceTable{
+		OwnerID:        u.ID,
+		OrganizationID: org.ID,
+		TemplateID:     tpl.ID,
+	})
 	// Double wrap should not cause an actual double wrap. So only 1 rbac call
 	// should be made.
 	az := dbauthz.New(db, rec, slog.Make(), coderdtest.AccessControlStorePointer())
@@ -2907,9 +2916,17 @@ func (s *MethodTestSuite) TestWorkspace() {
 
 func (s *MethodTestSuite) TestWorkspacePortSharing() {
 	s.Run("UpsertWorkspaceAgentPortShare", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
 		u := dbgen.User(s.T(), db, database.User{})
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{OwnerID: u.ID})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
 		ps := dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
 		//nolint:gosimple // casting is not a simplification
 		check.Args(database.UpsertWorkspaceAgentPortShareParams{
@@ -2921,9 +2938,17 @@ func (s *MethodTestSuite) TestWorkspacePortSharing() {
 		}).Asserts(ws, policy.ActionUpdate).Returns(ps)
 	}))
 	s.Run("GetWorkspaceAgentPortShare", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
 		u := dbgen.User(s.T(), db, database.User{})
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{OwnerID: u.ID})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
 		ps := dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
 		check.Args(database.GetWorkspaceAgentPortShareParams{
 			WorkspaceID: ps.WorkspaceID,
@@ -2932,16 +2957,32 @@ func (s *MethodTestSuite) TestWorkspacePortSharing() {
 		}).Asserts(ws, policy.ActionRead).Returns(ps)
 	}))
 	s.Run("ListWorkspaceAgentPortShares", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
 		u := dbgen.User(s.T(), db, database.User{})
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{OwnerID: u.ID})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
 		ps := dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
 		check.Args(ws.ID).Asserts(ws, policy.ActionRead).Returns([]database.WorkspaceAgentPortShare{ps})
 	}))
 	s.Run("DeleteWorkspaceAgentPortShare", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
 		u := dbgen.User(s.T(), db, database.User{})
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{OwnerID: u.ID})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
 		ps := dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
 		check.Args(database.DeleteWorkspaceAgentPortShareParams{
 			WorkspaceID: ps.WorkspaceID,
@@ -2950,20 +2991,35 @@ func (s *MethodTestSuite) TestWorkspacePortSharing() {
 		}).Asserts(ws, policy.ActionUpdate).Returns()
 	}))
 	s.Run("DeleteWorkspaceAgentPortSharesByTemplate", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
 		u := dbgen.User(s.T(), db, database.User{})
-		t := dbgen.Template(s.T(), db, database.Template{})
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{OwnerID: u.ID, TemplateID: t.ID})
-		_ = dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
-		check.Args(t.ID).Asserts(t, policy.ActionUpdate).Returns()
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
+	_:
+		dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
+		check.Args(tpl.ID).Asserts(tpl, policy.ActionUpdate).Returns()
 	}))
 	s.Run("ReduceWorkspaceAgentShareLevelToAuthenticatedByTemplate", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
 		u := dbgen.User(s.T(), db, database.User{})
-		t := dbgen.Template(s.T(), db, database.Template{})
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{OwnerID: u.ID, TemplateID: t.ID})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
 		_ = dbgen.WorkspaceAgentPortShare(s.T(), db, database.WorkspaceAgentPortShare{WorkspaceID: ws.ID})
-		check.Args(t.ID).Asserts(t, policy.ActionUpdate).Returns()
+		check.Args(tpl.ID).Asserts(tpl, policy.ActionUpdate).Returns()
 	}))
 }
 
@@ -3809,9 +3865,24 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 		check.Args(uuid.New()).Asserts(rbac.ResourceSystem, policy.ActionRead)
 	}))
 	s.Run("GetJFrogXrayScanByWorkspaceAndAgentID", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
-		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{})
-		agent := dbgen.WorkspaceAgent(s.T(), db, database.WorkspaceAgent{})
+		u := dbgen.User(s.T(), db, database.User{})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
+		pj := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
+		res := dbgen.WorkspaceResource(s.T(), db, database.WorkspaceResource{
+			JobID: pj.ID,
+		})
+		agent := dbgen.WorkspaceAgent(s.T(), db, database.WorkspaceAgent{
+			ResourceID: res.ID,
+		})
 
 		err := db.UpsertJFrogXrayScanByWorkspaceAndAgentID(context.Background(), database.UpsertJFrogXrayScanByWorkspaceAndAgentIDParams{
 			AgentID:     agent.ID,
@@ -3838,14 +3909,27 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 		}).Asserts(ws, policy.ActionRead).Returns(expect)
 	}))
 	s.Run("UpsertJFrogXrayScanByWorkspaceAndAgentID", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
-		tpl := dbgen.Template(s.T(), db, database.Template{})
+		u := dbgen.User(s.T(), db, database.User{})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
 		ws := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
-			TemplateID: tpl.ID,
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
+		pj := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{})
+		res := dbgen.WorkspaceResource(s.T(), db, database.WorkspaceResource{
+			JobID: pj.ID,
+		})
+		agent := dbgen.WorkspaceAgent(s.T(), db, database.WorkspaceAgent{
+			ResourceID: res.ID,
 		})
 		check.Args(database.UpsertJFrogXrayScanByWorkspaceAndAgentIDParams{
 			WorkspaceID: ws.ID,
-			AgentID:     uuid.New(),
+			AgentID:     agent.ID,
 		}).Asserts(tpl, policy.ActionCreate)
 	}))
 	s.Run("DeleteRuntimeConfig", s.Subtest(func(db database.Store, check *expects) {
@@ -3887,12 +3971,26 @@ func (s *MethodTestSuite) TestSystemFunctions() {
 		}).Asserts(rbac.ResourceSystem, policy.ActionCreate)
 	}))
 	s.Run("GetProvisionerJobTimingsByJobID", s.Subtest(func(db database.Store, check *expects) {
-		dbtestutil.DisableForeignKeys(s.T(), db)
-		w := dbgen.Workspace(s.T(), db, database.WorkspaceTable{})
+		u := dbgen.User(s.T(), db, database.User{})
+		org := dbgen.Organization(s.T(), db, database.Organization{})
+		tpl := dbgen.Template(s.T(), db, database.Template{
+			OrganizationID: org.ID,
+			CreatedBy:      u.ID,
+		})
+		tv := dbgen.TemplateVersion(s.T(), db, database.TemplateVersion{
+			OrganizationID: org.ID,
+			TemplateID:     uuid.NullUUID{UUID: tpl.ID, Valid: true},
+			CreatedBy:      u.ID,
+		})
+		w := dbgen.Workspace(s.T(), db, database.WorkspaceTable{
+			OwnerID:        u.ID,
+			OrganizationID: org.ID,
+			TemplateID:     tpl.ID,
+		})
 		j := dbgen.ProvisionerJob(s.T(), db, nil, database.ProvisionerJob{
 			Type: database.ProvisionerJobTypeWorkspaceBuild,
 		})
-		b := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{JobID: j.ID, WorkspaceID: w.ID})
+		b := dbgen.WorkspaceBuild(s.T(), db, database.WorkspaceBuild{JobID: j.ID, WorkspaceID: w.ID, TemplateVersionID: tv.ID})
 		t := dbgen.ProvisionerJobTimings(s.T(), db, b, 2)
 		check.Args(j.ID).Asserts(w, policy.ActionRead).Returns(t)
 	}))
