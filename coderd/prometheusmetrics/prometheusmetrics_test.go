@@ -58,7 +58,7 @@ func TestActiveUsers(t *testing.T) {
 		Name: "One",
 		Database: func(t *testing.T) database.Store {
 			db, _ := dbtestutil.NewDB(t)
-			dbtestutil.DisableForeignKeys(t, db)
+			dbtestutil.DisableForeignKeysAndTriggers(t, db)
 			dbgen.APIKey(t, db, database.APIKey{
 				LastUsed: dbtime.Now(),
 			})
@@ -69,7 +69,7 @@ func TestActiveUsers(t *testing.T) {
 		Name: "OneWithExpired",
 		Database: func(t *testing.T) database.Store {
 			db, _ := dbtestutil.NewDB(t)
-			dbtestutil.DisableForeignKeys(t, db)
+			dbtestutil.DisableForeignKeysAndTriggers(t, db)
 
 			dbgen.APIKey(t, db, database.APIKey{
 				LastUsed: dbtime.Now(),
@@ -87,7 +87,7 @@ func TestActiveUsers(t *testing.T) {
 		Name: "Multiple",
 		Database: func(t *testing.T) database.Store {
 			db, _ := dbtestutil.NewDB(t)
-			dbtestutil.DisableForeignKeys(t, db)
+			dbtestutil.DisableForeignKeysAndTriggers(t, db)
 			dbgen.APIKey(t, db, database.APIKey{
 				LastUsed: dbtime.Now(),
 			})
